@@ -1,5 +1,7 @@
 picture_text_relation/TRC_data/
-
+#Poetry锁定文件
+poetry.lock
+pyproject.toml
 # 一些常用的Python项目忽略项
 __pycache__/
 *.py[cod]
