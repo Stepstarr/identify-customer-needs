@@ -16,3 +16,6 @@ venv/
 .json
 .yaml
 .yml
+
+# 其他忽略项
+picture_text_relation/resources
