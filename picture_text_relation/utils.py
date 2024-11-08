@@ -2,9 +2,11 @@ import os
 import random
 import numpy as np
 import torch
+import constants
 from tqdm import tqdm
-from seqeval.metrics import classification_report, f1_score
-from seqeval.scheme import IOB2
+# from seqeval.metrics import classification_report, f1_score
+# from seqeval.scheme import IOB2
+import constants
 import torch
 import numpy as np
 import random
@@ -25,40 +27,43 @@ def seed_everything(seed):
     os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':4096:8'
 
 
-def train(train_loader, model, optimizer, task='itr'):
-    losses = []
-
+def train(dataloader, model, optimizer, task='itr', device='cuda'):
     model.train()
-    for batch in tqdm(train_loader):
+    total_loss = 0
+    
+    for batch in tqdm(dataloader):
         optimizer.zero_grad()
-        loss, _ = getattr(model, f'{task}_forward')(batch)
+        
+        if task == 'itr':
+            loss, _ = model.itr_forward(batch)
+        else:
+            raise ValueError(f'Unknown task: {task}')
+            
         loss.backward()
         optimizer.step()
-        losses.append(loss.item())
+        total_loss += loss.item()
+    
+    return total_loss / len(dataloader)
 
-    return np.mean(losses)
 
-
-def evaluate(model, test_loader):
-    true_labels = []
-    pred_labels = []
-
+def evaluate(model, dataloader, device='cuda'):
     model.eval()
+    all_preds = []
+    all_labels = []
+    
     with torch.no_grad():
-        for batch in tqdm(test_loader):
-            _, pred = model.itr_forward(batch)
+        for batch in dataloader:
+            if isinstance(batch, list):
+                labels = [pair.label for pair in batch]
+            else:
+                labels = batch.label
             
-            # 假设每个pair只有一个整体标签
-            batch_true_labels = [pair.label for pair in batch]
+            _, preds = model.itr_forward(batch)
             
-            true_labels.extend(batch_true_labels)
-            pred_labels.extend(pred)
-
-    # 确保标签是正确的格式（整数）
-    true_labels = [int(label) for label in true_labels]
-    pred_labels = [int(label) for label in pred_labels]
-
-    accuracy = accuracy_score(true_labels, pred_labels)
-    f1 = f1_score(true_labels, pred_labels, average='weighted')
+            all_preds.extend(preds)
+            all_labels.extend(labels)
+    
+    accuracy = accuracy_score(all_labels, all_preds)
+    f1 = f1_score(all_labels, all_preds, average='macro')
     
     return accuracy, f1

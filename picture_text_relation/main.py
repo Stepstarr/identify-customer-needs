@@ -12,7 +12,7 @@ from sklearn.metrics import f1_score  # 添加这行导入
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--seed', type=int, default=0)
-#parser.add_argument('--cuda', type=int, default=0)
+parser.add_argument('--cuda', type=int, default=0)
 parser.add_argument('--num_workers', type=int, default=2)
 parser.add_argument('--dataset', type=str, default='relationship')
 parser.add_argument('--encoder_t', type=str, default='bert-base-uncased')
@@ -27,9 +27,12 @@ parser.add_argument('--lr', type=float, default=1e-5)
 parser.add_argument('--num_epochs', type=int, default=10)
 parser.add_argument('--optim', type=str, default='Adam', choices=['Adam', 'AdamW'])
 args = parser.parse_args()
-device = torch.device('cpu')
+device = torch.device(f'cuda:{args.cuda}' if torch.cuda.is_available() else 'cpu')
+print(f'使用设备: {device}')
 
 if __name__ == '__main__':
+    save_dir = f'log/{args.dataset}'
+    os.makedirs(save_dir, exist_ok=True)  # 添加这行
     # 将所有主要逻辑移到这个条件语句下
     seed_everything(args.seed)
     generator = torch.Generator()
@@ -39,8 +42,6 @@ if __name__ == '__main__':
     itr_corpus = loader.load_itr_corpus('picture_text_relation/TRC_data')
     print(f"训练集大小: {len(itr_corpus.train)}")
     print(f"测试集大小: {len(itr_corpus.test)}")
-
-   
 
     itr_train_loader = DataLoader(itr_corpus.train, batch_size=args.bs, collate_fn=list, num_workers=args.num_workers,
                                   shuffle=True, worker_init_fn=seed_worker, generator=generator)
@@ -62,14 +63,18 @@ if __name__ == '__main__':
     best_test_accuracy = 0
     best_test_f1 = 0
     for epoch in range(1, args.num_epochs + 1):
-        itr_loss = train(itr_train_loader, model, optimizer, task='itr')
+        itr_loss = train(itr_train_loader, model, optimizer, task='itr', device=device)
         itr_losses.append(itr_loss)
         print(f'图像-文本关系分类在第{epoch}轮的损失: {itr_loss:.2f}')
 
-        test_accuracy, test_f1 = evaluate(model, itr_test_loader)#, task='itr')
+        test_accuracy, test_f1 = evaluate(model, itr_test_loader, device=device)
         print(f'测试集上的准确率: {test_accuracy:.4f}, F1分数: {test_f1:.4f}')
         if test_accuracy > best_test_accuracy:
             best_test_accuracy = test_accuracy
+            # 保存最佳模型
+            model_path = f'{save_dir}/best_model.pth'
+            torch.save(model.state_dict(), model_path)
+            print(f'保存最佳模型到: {model_path}')
         if test_f1 > best_test_f1:
             best_test_f1 = test_f1
 
@@ -81,6 +86,7 @@ if __name__ == '__main__':
         'best_test_accuracy': best_test_accuracy,
         'best_test_f1': best_test_f1,
     }
-    file_name = f'log/{args.dataset}/bs{args.bs}_lr{args.lr}_seed{args.seed}.json'
+    # 保存结果
+    file_name = f'{save_dir}/bs{args.bs}_lr{args.lr}_seed{args.seed}.json'
     with open(file_name, 'w') as f:
         json.dump(results, f, indent=4)

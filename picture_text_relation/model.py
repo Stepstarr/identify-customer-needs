@@ -42,30 +42,33 @@ class MyModel(nn.Module):
         self.encoder_t = encoder_t
         self.encoder_v = encoder_v
         self.tokenizer = tokenizer
-        self.device = torch.device('cpu')
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         print(f"Using device: {self.device}")
+        
+        self.encoder_t = self.encoder_t.to(self.device)
+        self.encoder_v = self.encoder_v.to(self.device)
         
         self.proj = nn.Linear(encoder_v.fc.in_features, encoder_t.config.hidden_size)
         self.aux_head = nn.Linear(encoder_t.config.hidden_size, num_classes)
         
-        # ... 其他初始化代码 ...
+        self.proj = self.proj.to(self.device)
+        self.aux_head = self.aux_head.to(self.device)
 
     @classmethod
     def from_pretrained(cls, args):
-        device = torch.device('cpu')
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         models_path = 'picture_text_relation/resources'
 
         encoder_t_path = f'{models_path}/{args.encoder_t}'
         print(encoder_t_path)
         tokenizer = AutoTokenizer.from_pretrained(encoder_t_path, local_files_only=True)
-        encoder_t = AutoModel.from_pretrained(encoder_t_path)
-        config = AutoConfig.from_pretrained(encoder_t_path)
+        encoder_t = AutoModel.from_pretrained(encoder_t_path, local_files_only=True)
+        config = AutoConfig.from_pretrained(encoder_t_path, local_files_only=True)
         hid_dim_t = config.hidden_size
 
-        encoder_v = getattr(torchvision.models, args.encoder_v)(pretrained=True)
+        encoder_v = getattr(torchvision.models, args.encoder_v)(pretrained=False)
         
-        # 使用 map_location 参数确保模型加载到 CPU
-        encoder_v.load_state_dict(torch.load(f'{models_path}/cnn/{args.encoder_v}.pth', map_location='cpu'))
+        encoder_v.load_state_dict(torch.load(f'{models_path}/cnn/{args.encoder_v}.pth', map_location=device))
         hid_dim_v = encoder_v.fc.in_features
 
         return cls(
